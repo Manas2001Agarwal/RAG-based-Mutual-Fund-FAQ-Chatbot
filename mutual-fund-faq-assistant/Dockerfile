@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for caching)
-COPY ./requirements.txt .
+# Copy requirements from backend folder
+COPY backend/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy backend application code
+COPY backend/ .
 
 # Create data directory with proper permissions
 RUN mkdir -p /app/data/chroma_db && \
@@ -33,3 +33,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Start command
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
