@@ -11,7 +11,7 @@ from typing import Optional
 st.set_page_config(
     page_title="INDMoney - Mutual Fund FAQ Bot",
     page_icon="💼",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -33,9 +33,11 @@ st.markdown("""
     }
     
     .block-container {
-        max-width: 1000px;
+        max-width: 900px;
         padding-top: 2rem;
-        padding-bottom: 8rem;
+        padding-bottom: 2rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
     
     /* Header card */
@@ -154,60 +156,38 @@ st.markdown("""
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
     
-    /* Input area fixed at bottom */
-    .stTextInput {
-        position: fixed;
-        bottom: 2rem;
-        left: 50%;
-        transform: translateX(-50%);
-        width: calc(100% - 4rem);
-        max-width: 960px;
-        z-index: 999;
-    }
-    
-    .stTextInput > div {
-        background: white;
-        border-radius: 24px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-        display: flex;
-        align-items: center;
-    }
-    
-    .stTextInput input {
+    /* Chat input styling */
+    .stChatInputContainer {
+        background: transparent !important;
         border: none !important;
-        padding: 1rem 1.5rem !important;
-        font-size: 0.95rem;
-        border-radius: 24px;
     }
     
-    .stTextInput input:focus {
+    .stChatInput {
+        background: white !important;
+        border-radius: 24px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+        border: 1px solid #e0e0e0 !important;
+        padding: 0.5rem 1rem !important;
+    }
+    
+    .stChatInput textarea {
+        background: white !important;
+        border: none !important;
+    }
+    
+    .stChatInput textarea:focus {
         box-shadow: none !important;
+        border: none !important;
     }
     
-    /* Send button */
-    div[data-testid="column"]:last-child .stButton {
-        position: fixed;
-        bottom: 2.5rem;
-        right: calc(50% - 450px);
-        z-index: 1000;
+    /* Ensure proper width */
+    [data-testid="stChatInput"] {
+        max-width: 100%;
     }
     
-    div[data-testid="column"]:last-child .stButton button {
-        background: #0066cc;
-        color: white;
-        border: none;
-        border-radius: 50%;
-        width: 44px;
-        height: 44px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 8px rgba(0,102,204,0.3);
-    }
-    
-    div[data-testid="column"]:last-child .stButton button:hover {
-        background: #0052a3;
+    /* Remove extra padding/margin */
+    [data-testid="stChatInputContainer"] {
+        padding: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -229,7 +209,8 @@ def send_query(query: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         return None
-    except:
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
         return None
 
 
@@ -242,7 +223,6 @@ def main():
     
     # Header with INDMoney logo
     try:
-        # Try to load the INDMoney logo
         with open("assets/indmoney_logo.png", "rb") as image_file:
             encoded_logo = base64.b64encode(image_file.read()).decode()
         
@@ -256,7 +236,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     except FileNotFoundError:
-        # Fallback if logo not found
         st.markdown("""
         <div class="header-box">
             <div class="logo-box">IND</div>
@@ -266,7 +245,6 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.warning("⚠️ Logo not found at assets/indmoney_logo.png - using fallback")
     
     # Check backend
     if not check_backend_health():
@@ -291,7 +269,7 @@ def main():
     # Try asking section
     st.markdown('<div class="try-asking">Try asking:</div>', unsafe_allow_html=True)
     
-    # Example questions - left aligned
+    # Example questions
     examples = [
         "What is a Mutual Fund?",
         "What is the difference between SIP and lump sum investment?",
@@ -311,8 +289,7 @@ def main():
                 })
             st.rerun()
     
-    # Spacer for chat area
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.divider()
     
     # Display chat messages
     if st.session_state.messages:
@@ -332,35 +309,33 @@ def main():
         if st.button("Clear Chat", type="secondary"):
             st.session_state.messages = []
             st.rerun()
+        
+        st.divider()
+    else:
+        st.info("💬 Ask a question to get started")
+        st.divider()
     
-    # Spacer for fixed input at bottom
-    st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+    # Chat input - properly aligned
+    user_input = st.chat_input("Type your message", key="chat_input")
     
-    # Input area (fixed at bottom via CSS)
-    col1, col2 = st.columns([20, 1])
-    
-    with col1:
-        user_input = st.text_input(
-            "message",
-            placeholder="Type your message",
-            label_visibility="collapsed",
-            key="user_input"
-        )
-    
-    with col2:
-        send = st.button("🚀", key="send_btn")
-    
-    # Handle send
-    if send and user_input:
+    if user_input:
+        # Add user message
         st.session_state.messages.append({"role": "user", "content": user_input})
-        result = send_query(user_input)
-        if result:
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": result["answer"],
-                "citation": result.get("citation"),
-                "classification": result.get("classification")
-            })
+        
+        # Get response
+        with st.spinner("🔍 Getting answer..."):
+            result = send_query(user_input)
+            
+            if result:
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": result["answer"],
+                    "citation": result.get("citation"),
+                    "classification": result.get("classification")
+                })
+            else:
+                st.error("Failed to get response from backend. Please try again.")
+        
         st.rerun()
 
 
