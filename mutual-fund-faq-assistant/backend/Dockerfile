@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for caching)
-COPY requirements.txt .
+COPY ./requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -24,7 +24,7 @@ COPY . .
 RUN mkdir -p /app/data/chroma_db && \
     chmod -R 755 /app/data
 
-# Expose port (Railway will override with $PORT)
+# Expose port
 EXPOSE 8000
 
 # Health check
