@@ -1,236 +1,215 @@
 """
-Streamlit Frontend for Mutual Fund FAQ Assistant - Modern UI
+Streamlit Frontend for INDMoney Mutual Fund FAQ Bot
+Clean chat interface with INDMoney branding
 """
 import streamlit as st
 import requests
+import base64
 from typing import Optional
-import time
+
+# MUST BE FIRST
+st.set_page_config(
+    page_title="INDMoney - Mutual Fund FAQ Bot",
+    page_icon="💼",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # Configuration
 API_URL = "http://localhost:8000/api/chat"
 HEALTH_URL = "http://localhost:8000/health"
 
-# Page configuration
-st.set_page_config(
-    page_title="Mutual Fund FAQ Assistant",
-    page_icon="💰",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
-# Modern Custom CSS
+# Custom CSS
 st.markdown("""
-    <style>
-    /* Import Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    /* Global Styles */
-    * {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Hide Streamlit branding */
+<style>
+    /* Hide Streamlit elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    header {visibility: hidden;}
     
     /* Main container */
     .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 0;
+        background-color: #f8f9fa;
     }
     
-    /* Chat container */
-    .chat-container {
+    .block-container {
+        max-width: 1000px;
+        padding-top: 2rem;
+        padding-bottom: 8rem;
+    }
+    
+    /* Header card */
+    .header-box {
         background: white;
-        border-radius: 20px;
-        padding: 2.5rem;
-        margin: 2rem auto;
-        max-width: 800px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-    
-    /* Header */
-    .header {
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    
-    .header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
-    }
-    
-    .header p {
-        font-size: 1.1rem;
-        color: #6b7280;
-        margin-top: 0;
-    }
-    
-    /* Disclaimer badge */
-    .disclaimer-badge {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border-left: 4px solid #f59e0b;
-        padding: 1rem 1.5rem;
+        padding: 1.5rem 2rem;
         border-radius: 12px;
-        margin: 1.5rem 0;
-        font-size: 0.95rem;
-        color: #92400e;
-    }
-    
-    .disclaimer-badge strong {
-        color: #78350f;
-    }
-    
-    /* Example questions */
-    .example-section {
-        margin: 2rem 0;
-    }
-    
-    .example-label {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 1rem;
     }
     
-    /* Answer display */
-    .answer-container {
-        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 2rem 0;
-        border-left: 4px solid #0ea5e9;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    .logo-img {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        object-fit: cover;
     }
     
-    .question-text {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #1e40af;
-        margin-bottom: 1rem;
+    .logo-box {
+        width: 56px;
+        height: 56px;
+        background: #2c3e50;
+        border-radius: 50%;
         display: flex;
-        align-items: flex-start;
-        gap: 0.5rem;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: white;
+        font-weight: bold;
+        font-size: 1.2rem;
     }
     
-    .answer-text {
-        font-size: 1.05rem;
-        line-height: 1.7;
-        color: #1f2937;
-        margin: 1rem 0;
+    .header-text h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1a1a1a;
     }
     
-    .citation-box {
+    .header-text p {
+        margin: 0;
+        font-size: 0.95rem;
+        color: #666;
+    }
+    
+    /* Disclaimer */
+    .disclaimer {
+        background: #fff9e6;
+        border: 1px solid #f5e6c3;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    .disclaimer-icon {
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    
+    .disclaimer-content {
+        flex: 1;
+    }
+    
+    .disclaimer-title {
+        font-weight: 600;
+        color: #855d00;
+        margin: 0 0 0.25rem 0;
+    }
+    
+    .disclaimer-text {
+        color: #6b5100;
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    /* Try asking section */
+    .try-asking {
+        font-weight: 500;
+        color: #666;
+        margin: 1.5rem 0 0.75rem 0;
+        font-size: 0.95rem;
+        text-align: left;
+    }
+    
+    /* Example buttons - left aligned */
+    .stButton button {
+        width: 100%;
+        text-align: left;
+        background: white;
+        color: #1a1a1a;
+        border: 1px solid #e0e0e0;
+        padding: 0.875rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 400;
+        margin-bottom: 0.5rem;
+        justify-content: flex-start;
+    }
+    
+    .stButton button:hover {
+        background: #f8f9fa;
+        border-color: #0066cc;
+    }
+    
+    /* Chat messages */
+    .stChatMessage {
         background: white;
         border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-top: 1rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    
+    /* Input area fixed at bottom */
+    .stTextInput {
+        position: fixed;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: calc(100% - 4rem);
+        max-width: 960px;
+        z-index: 999;
+    }
+    
+    .stTextInput > div {
+        background: white;
+        border-radius: 24px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        font-size: 0.9rem;
-        color: #6b7280;
-        border: 1px solid #e5e7eb;
     }
     
-    .citation-box a {
-        color: #0ea5e9;
-        text-decoration: none;
-        font-weight: 500;
+    .stTextInput input {
+        border: none !important;
+        padding: 1rem 1.5rem !important;
+        font-size: 0.95rem;
+        border-radius: 24px;
     }
     
-    .citation-box a:hover {
-        text-decoration: underline;
+    .stTextInput input:focus {
+        box-shadow: none !important;
     }
     
-    /* Opinion badge */
-    .opinion-badge {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #991b1b;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        margin-top: 1rem;
-        display: inline-block;
+    /* Send button */
+    div[data-testid="column"]:last-child .stButton {
+        position: fixed;
+        bottom: 2.5rem;
+        right: calc(50% - 450px);
+        z-index: 1000;
     }
     
-    /* Buttons */
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    div[data-testid="column"]:last-child .stButton button {
+        background: #0066cc;
         color: white;
         border: none;
-        border-radius: 12px;
-        padding: 0.75rem 2rem;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.5);
-    }
-    
-    /* Text input */
-    .stTextInput > div > div > input {
-        border-radius: 12px;
-        border: 2px solid #e5e7eb;
-        padding: 1rem;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Spinner */
-    .stSpinner > div {
-        border-color: #667eea;
-    }
-    
-    /* Backend status */
-    .status-badge {
-        display: inline-flex;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,102,204,0.3);
     }
     
-    .status-online {
-        background: #d1fae5;
-        color: #065f46;
+    div[data-testid="column"]:last-child .stButton button:hover {
+        background: #0052a3;
     }
-    
-    .status-offline {
-        background: #fee2e2;
-        color: #991b1b;
-    }
-    
-    /* Footer */
-    .footer {
-        text-align: center;
-        margin-top: 3rem;
-        padding-top: 2rem;
-        border-top: 1px solid #e5e7eb;
-        color: #9ca3af;
-        font-size: 0.85rem;
-    }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
 
@@ -246,185 +225,143 @@ def check_backend_health() -> bool:
 def send_query(query: str) -> Optional[dict]:
     """Send query to backend API"""
     try:
-        response = requests.post(
-            API_URL,
-            json={"query": query},
-            timeout=30
-        )
-        
+        response = requests.post(API_URL, json={"query": query}, timeout=30)
         if response.status_code == 200:
             return response.json()
-        else:
-            st.error(f"❌ API Error: {response.status_code}")
-            return None
-            
-    except requests.exceptions.ConnectionError:
-        st.error("❌ Cannot connect to backend API. Please make sure the FastAPI server is running.")
         return None
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+    except:
         return None
 
 
 def main():
-    """Main Streamlit application"""
+    """Main application"""
     
-    # Check backend status first
-    backend_online = check_backend_health()
+    # Initialize session state
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
     
-    # Header with status
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("""
-            <div class="header">
-                <h1>💰 Mutual Fund FAQ</h1>
-                <p>Get instant, factual answers about mutual funds</p>
+    # Header with INDMoney logo
+    try:
+        # Try to load the INDMoney logo
+        with open("assets/indmoney_logo.png", "rb") as image_file:
+            encoded_logo = base64.b64encode(image_file.read()).decode()
+        
+        st.markdown(f"""
+        <div class="header-box">
+            <img src="data:image/png;base64,{encoded_logo}" class="logo-img" />
+            <div class="header-text">
+                <h1>Mutual Fund FAQ Bot</h1>
+                <p>Get answers to your mutual fund questions</p>
             </div>
+        </div>
         """, unsafe_allow_html=True)
+    except FileNotFoundError:
+        # Fallback if logo not found
+        st.markdown("""
+        <div class="header-box">
+            <div class="logo-box">IND</div>
+            <div class="header-text">
+                <h1>Mutual Fund FAQ Bot</h1>
+                <p>Get answers to your mutual fund questions</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.warning("⚠️ Logo not found at assets/indmoney_logo.png - using fallback")
     
-    with col2:
-        if backend_online:
-            st.markdown('<div class="status-badge status-online">🟢 Online</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="status-badge status-offline">🔴 Offline</div>', unsafe_allow_html=True)
+    # Check backend
+    if not check_backend_health():
+        st.error("⚠️ Backend is offline. Please start the server.")
+        st.code("cd backend && uvicorn app.main:app --reload", language="bash")
+        st.stop()
     
     # Disclaimer
     st.markdown("""
-        <div class="disclaimer-badge">
-            <strong>⚠️ Important:</strong> This assistant provides facts only. 
-            No investment advice is offered. Consult a SEBI-registered advisor for personalized guidance.
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if not backend_online:
-        st.error("⚠️ Backend API is not responding. Please start the FastAPI server.")
-        st.code("cd backend && uvicorn app.main:app --reload", language="bash")
-        return
-    
-    # Example questions
-    st.markdown("""
-        <div class="example-section">
-            <div class="example-label">
-                💡 Try these example questions
+    <div class="disclaimer">
+        <div class="disclaimer-icon">ℹ️</div>
+        <div class="disclaimer-content">
+            <div class="disclaimer-title">Disclaimer:</div>
+            <div class="disclaimer-text">
+                This assistant provides <strong>facts only</strong>. 
+                No investment advice is offered. For personalized guidance, consult a SEBI-registered advisor.
             </div>
         </div>
+    </div>
     """, unsafe_allow_html=True)
     
-    example_questions = [
-        "What is KYC in mutual funds?",
-        "How does Aadhaar-based e-KYC work?",
-        "What are derivatives?"
+    # Try asking section
+    st.markdown('<div class="try-asking">Try asking:</div>', unsafe_allow_html=True)
+    
+    # Example questions - left aligned
+    examples = [
+        "What is a Mutual Fund?",
+        "What is the difference between SIP and lump sum investment?",
+        "What is NAV and how is it calculated?"
     ]
     
-    # Initialize session state
-    if 'current_answer' not in st.session_state:
-        st.session_state.current_answer = None
-    if 'processing' not in st.session_state:
-        st.session_state.processing = False
-    
-    # Example question buttons
-    cols = st.columns(len(example_questions))
-    for idx, (col, question) in enumerate(zip(cols, example_questions)):
-        with col:
-            if st.button(f"📌 {question}", key=f"example_{idx}", use_container_width=True):
-                st.session_state.processing = True
-                with st.spinner("🔍 Finding answer..."):
-                    result = send_query(question)
-                    if result:
-                        st.session_state.current_answer = result
-                        st.session_state.processing = False
-                        st.rerun()
-    
-    # Divider
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Query input
-    st.markdown("""
-        <div style="margin: 2rem 0 1rem 0;">
-            <div style="font-size: 1.1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                💬 Ask your question
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    query = st.text_input(
-        "Query",
-        placeholder="e.g., What is a mutual fund?",
-        label_visibility="collapsed",
-        key="user_query"
-    )
-    
-    # Send button - centered
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        send_button = st.button("🚀 Get Answer", type="primary", use_container_width=True)
-    
-    # Process query
-    if send_button and query and query.strip():
-        st.session_state.processing = True
-        with st.spinner("🔍 Finding answer..."):
-            time.sleep(0.3)  # Small delay for UX
-            result = send_query(query.strip())
+    for example in examples:
+        if st.button(example, key=f"ex_{example}"):
+            st.session_state.messages.append({"role": "user", "content": example})
+            result = send_query(example)
             if result:
-                st.session_state.current_answer = result
-                st.session_state.processing = False
-                st.rerun()
-    elif send_button and (not query or not query.strip()):
-        st.warning("⚠️ Please enter a question")
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": result["answer"],
+                    "citation": result.get("citation"),
+                    "classification": result.get("classification")
+                })
+            st.rerun()
     
-    # Display answer
-    if st.session_state.current_answer:
-        answer_data = st.session_state.current_answer
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Answer container
-        st.markdown(f"""
-            <div class="answer-container">
-                <div class="question-text">
-                    <span>💬</span>
-                    <span>{answer_data['query']}</span>
-                </div>
-                <div class="answer-text">
-                    {answer_data['answer']}
-                </div>
-        """, unsafe_allow_html=True)
-        
-        # Citation
-        if answer_data.get("citation"):
-            st.markdown(f"""
-                <div class="citation-box">
-                    <span>📎</span>
-                    <span>Source: <a href="{answer_data['citation']}" target="_blank">View Document</a></span>
-                </div>
-            """, unsafe_allow_html=True)
-        
-        # Opinion badge
-        if answer_data["classification"] == "opinion":
-            st.markdown("""
-                <div class="opinion-badge">
-                    🚫 Opinion-based query - No investment advice provided
-                </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Clear button
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            if st.button("🔄 Ask Another Question", use_container_width=True):
-                st.session_state.current_answer = None
-                st.rerun()
+    # Spacer for chat area
+    st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Footer
-    st.markdown("""
-        <div class="footer">
-            <p>Powered by SEBI FAQ Documents • Built with LangGraph & FastAPI</p>
-            <p style="margin-top: 0.5rem; font-size: 0.8rem;">
-                💡 This is a prototype. Always verify important information with official sources.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    # Display chat messages
+    if st.session_state.messages:
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                with st.chat_message("user", avatar="👤"):
+                    st.write(msg["content"])
+            else:
+                with st.chat_message("assistant", avatar="🤖"):
+                    st.write(msg["content"])
+                    if msg.get("citation"):
+                        st.caption(f"📎 [View Source]({msg['citation']})")
+                    if msg.get("classification") == "opinion":
+                        st.warning("🚫 No investment advice provided")
+        
+        # Clear chat button
+        if st.button("Clear Chat", type="secondary"):
+            st.session_state.messages = []
+            st.rerun()
+    
+    # Spacer for fixed input at bottom
+    st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+    
+    # Input area (fixed at bottom via CSS)
+    col1, col2 = st.columns([20, 1])
+    
+    with col1:
+        user_input = st.text_input(
+            "message",
+            placeholder="Type your message",
+            label_visibility="collapsed",
+            key="user_input"
+        )
+    
+    with col2:
+        send = st.button("🚀", key="send_btn")
+    
+    # Handle send
+    if send and user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        result = send_query(user_input)
+        if result:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["answer"],
+                "citation": result.get("citation"),
+                "classification": result.get("classification")
+            })
+        st.rerun()
 
 
 if __name__ == "__main__":
