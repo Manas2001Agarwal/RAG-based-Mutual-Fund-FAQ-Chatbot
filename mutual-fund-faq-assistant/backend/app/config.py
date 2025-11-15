@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "models/text-embedding-004"
     
     # Vector DB Configuration
-    CHROMA_PERSIST_DIR: str = "./data/chroma_db"
+    CHROMA_PERSIST_DIR: str = "/app/data/chroma_db"  # Railway volume path
     COLLECTION_NAME: str = "mutual_fund_faqs"
     
     # PDF Sources
@@ -47,8 +47,13 @@ class Settings(BaseSettings):
     @property
     def chroma_persist_path(self) -> str:
         """Get absolute path for ChromaDB persistence"""
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base_dir, self.CHROMA_PERSIST_DIR.lstrip("./"))
+        # For Railway, use environment variable or default
+        persist_dir = os.getenv("CHROMA_PERSIST_DIR", self.CHROMA_PERSIST_DIR)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(persist_dir, exist_ok=True)
+        
+        return persist_dir
 
 
 # Global settings instance
