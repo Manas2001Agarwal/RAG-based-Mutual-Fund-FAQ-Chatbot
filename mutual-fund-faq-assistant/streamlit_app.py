@@ -107,72 +107,105 @@ st.markdown("""
 @st.cache_resource
 def initialize_backend():
     """Initialize vector store and LLM (cached)"""
-    from langchain_community.vectorstores import Chroma
-    from langchain_google_genai import GoogleGenerativeAIEmbeddings
-    from langchain_groq import ChatGroq
-    from langchain.schema import Document
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    import pypdf
-    
-    # Get API keys from Streamlit secrets
-    groq_api_key = st.secrets["GROQ_API_KEY"]
-    google_api_key = st.secrets["GOOGLE_API_KEY"]
-    
-    # Initialize embeddings
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004",
-        google_api_key=google_api_key
-    )
-    
-    # Initialize LLM
-    llm = ChatGroq(
-        api_key=groq_api_key,
-        model="mixtral-8x7b-32768",
-        temperature=0.2
-    )
-    
-    # Load PDFs
-    pdf_dir = "backend/data/pdfs"
-    documents = []
-    
-    if os.path.exists(pdf_dir):
-        pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
+    try:
+        from langchain_community.vectorstores import Chroma
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        from langchain_groq import ChatGroq
+        from langchain.schema import Document
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        import pypdf
         
-        for pdf_file in pdf_files:
-            filepath = os.path.join(pdf_dir, pdf_file)
+        # Get API keys from Streamlit secrets
+        groq_api_key = st.secrets["GROQ_API_KEY"]
+        google_api_key = st.secrets["GOOGLE_API_KEY"]
+        
+        # Initialize embeddings
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004",
+            google_api_key=google_api_key
+        )
+        
+        # Initialize LLM
+        llm = ChatGroq(
+            api_key=groq_api_key,
+            model="mixtral-8x7b-32768",
+            temperature=0.2
+        )
+        
+        # Load PDFs
+        pdf_dir = "backend/data/pdfs"
+        documents = []
+        
+        st.info(f"📂 Looking for PDFs in: {pdf_dir}")
+        
+        if os.path.exists(pdf_dir):
+            pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
+            st.info(f"📄 Found {len(pdf_files)} PDF files")
             
-            with open(filepath, 'rb') as file:
-                pdf_reader = pypdf.PdfReader(file)
+            for pdf_file in pdf_files:
+                filepath = os.path.join(pdf_dir, pdf_file)
                 
-                for page_num in range(len(pdf_reader.pages)):
-                    text = pdf_reader.pages[page_num].extract_text()
-                    
-                    if text.strip():
-                        documents.append(
-                            Document(
-                                page_content=text,
-                                metadata={
-                                    "source": pdf_file,
-                                    "page": page_num + 1
-                                }
-                            )
-                        )
-    
-    # Split documents
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
-    splits = text_splitter.split_documents(documents)
-    
-    # Create vector store
-    vectorstore = Chroma.from_documents(
-        documents=splits,
-        embedding=embeddings,
-        persist_directory=None  # In-memory
-    )
-    
-    return vectorstore, llm
+                try:
+                    with open(filepath, 'rb') as file:
+                        pdf_reader = pypdf.PdfReader(file)
+                        
+                        for page_num in range(len(pdf_reader.pages)):
+                            text = pdf_reader.pages[page_num].extract_text()
+                            
+                            if text and text.strip():
+                                documents.append(
+                                    Document(
+                                        page_content=text,
+                                        metadata={
+                                            "source": pdf_file,
+                                            "page": page_num + 1
+                                        }
+                                    )
+                                )
+                except Exception as e:
+                    st.warning(f"⚠️ Error reading {pdf_file}: {e}")
+        else:
+            st.warning(f"⚠️ PDF directory not found: {pdf_dir}")
+        
+        if not documents:
+            st.error("❌ No documents loaded! Please check PDF files.")
+            st.stop()
+        
+        st.success(f"✅ Loaded {len(documents)} pages from PDFs")
+        
+        # Split documents
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        splits = text_splitter.split_documents(documents)
+        
+        st.info(f"🔄 Created {len(splits)} chunks")
+        
+        if not splits:
+            st.error("❌ No chunks created!")
+            st.stop()
+        
+        # Create vector store with error handling
+        try:
+            vectorstore = Chroma.from_documents(
+                documents=splits,
+                embedding=embeddings,
+                collection_name="mutual_fund_faqs"
+            )
+            st.success(f"✅ Vector store created with {len(splits)} chunks")
+        except Exception as e:
+            st.error(f"❌ Vector store creation failed: {e}")
+            st.stop()
+        
+        return vectorstore, llm
+        
+    except Exception as e:
+        st.error(f"❌ Initialization error: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        st.stop()
 
 
 def classify_query(query: str, llm) -> str:
@@ -200,56 +233,64 @@ def get_answer(query: str, vectorstore, llm) -> Dict:
     """Get answer for user query"""
     from langchain.prompts import ChatPromptTemplate
     
-    # Classify query
-    classification = classify_query(query, llm)
-    
-    # If opinion, refuse
-    if classification == "opinion":
+    try:
+        # Classify query
+        classification = classify_query(query, llm)
+        
+        # If opinion, refuse
+        if classification == "opinion":
+            return {
+                "query": query,
+                "answer": "I can only provide factual information about mutual funds. I cannot offer investment advice or recommendations. Please consult a SEBI-registered financial advisor for personalized guidance.",
+                "citation": None,
+                "classification": "opinion"
+            }
+        
+        # Retrieve relevant documents
+        docs = vectorstore.similarity_search(query, k=3)
+        
+        if not docs:
+            return {
+                "query": query,
+                "answer": "I couldn't find relevant information in the knowledge base. Please rephrase your question.",
+                "citation": None,
+                "classification": "factual"
+            }
+        
+        # Create context from retrieved docs
+        context = "\n\n".join([doc.page_content for doc in docs])
+        source = docs[0].metadata.get("source", "Unknown")
+        
+        # Generate answer
+        qa_prompt = ChatPromptTemplate.from_template("""
+        You are a helpful assistant that answers questions about mutual funds based on SEBI guidelines.
+        
+        Use the following context to answer the question. Be concise and accurate.
+        If the answer is not in the context, say so.
+        
+        Context:
+        {context}
+        
+        Question: {query}
+        
+        Answer:
+        """)
+        
+        response = llm.invoke(qa_prompt.format(context=context, query=query))
+        
         return {
             "query": query,
-            "answer": "I can only provide factual information about mutual funds. I cannot offer investment advice or recommendations. Please consult a SEBI-registered financial advisor for personalized guidance.",
-            "citation": None,
-            "classification": "opinion"
-        }
-    
-    # Retrieve relevant documents
-    docs = vectorstore.similarity_search(query, k=3)
-    
-    if not docs:
-        return {
-            "query": query,
-            "answer": "I couldn't find relevant information in the knowledge base. Please rephrase your question.",
-            "citation": None,
+            "answer": response.content,
+            "citation": source,
             "classification": "factual"
         }
-    
-    # Create context from retrieved docs
-    context = "\n\n".join([doc.page_content for doc in docs])
-    source = docs[0].metadata.get("source", "Unknown")
-    
-    # Generate answer
-    qa_prompt = ChatPromptTemplate.from_template("""
-    You are a helpful assistant that answers questions about mutual funds based on SEBI guidelines.
-    
-    Use the following context to answer the question. Be concise and accurate.
-    If the answer is not in the context, say so.
-    
-    Context:
-    {context}
-    
-    Question: {query}
-    
-    Answer:
-    """)
-    
-    response = llm.invoke(qa_prompt.format(context=context, query=query))
-    
-    return {
-        "query": query,
-        "answer": response.content,
-        "citation": source,
-        "classification": "factual"
-    }
+    except Exception as e:
+        return {
+            "query": query,
+            "answer": f"Error processing query: {str(e)}",
+            "citation": None,
+            "classification": "error"
+        }
 
 
 # ============================================================================
@@ -260,17 +301,6 @@ def main():
     # Initialize session state
     if 'messages' not in st.session_state:
         st.session_state.messages = []
-    
-    if 'backend_ready' not in st.session_state:
-        with st.spinner("🔄 Initializing AI system..."):
-            try:
-                vectorstore, llm = initialize_backend()
-                st.session_state.vectorstore = vectorstore
-                st.session_state.llm = llm
-                st.session_state.backend_ready = True
-            except Exception as e:
-                st.error(f"❌ Initialization failed: {e}")
-                st.stop()
     
     # Header
     try:
@@ -295,6 +325,18 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
+    
+    # Initialize backend
+    if 'backend_ready' not in st.session_state:
+        with st.spinner("🔄 Initializing AI system... This may take 1-2 minutes..."):
+            try:
+                vectorstore, llm = initialize_backend()
+                st.session_state.vectorstore = vectorstore
+                st.session_state.llm = llm
+                st.session_state.backend_ready = True
+            except Exception as e:
+                st.error(f"❌ Initialization failed: {e}")
+                st.stop()
     
     # Status
     if st.session_state.backend_ready:
