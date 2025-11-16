@@ -4,11 +4,20 @@ Chat API routes
 from fastapi import APIRouter, HTTPException
 from app.models import ChatRequest, ChatResponse
 from app.agents.orchestrator import RAGOrchestrator
+import app.main as main_app
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
 # Initialize orchestrator (singleton)
-orchestrator = RAGOrchestrator()
+orchestrator = None
+
+
+def get_orchestrator():
+    """Get or create orchestrator instance"""
+    global orchestrator
+    if orchestrator is None:
+        orchestrator = RAGOrchestrator()
+    return orchestrator
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -22,9 +31,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         ChatResponse with answer and citation
     """
+    # Check if vector DB is ready
+    if not main_app.vector_db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Service is initializing. Vector database is still loading. Please try again in 1-2 minutes."
+        )
+    
     try:
         # Process query through RAG pipeline
-        result = orchestrator.process_query(request.query)
+        orch = get_orchestrator()
+        result = orch.process_query(request.query)
         
         return ChatResponse(
             query=result["query"],
@@ -38,3 +55,5 @@ async def chat(request: ChatRequest) -> ChatResponse:
             status_code=500,
             detail=f"Error processing query: {str(e)}"
         )
+        
+        
